@@ -8,7 +8,7 @@
 | PassWall | 代理分流, Xray 内核已预置到 `/usr/bin/xray` |
 | KMS | vlmcsd, 开机自启, 监听 `1688/tcp` |
 
-镜像已按旁路由预设: LAN 静态 IP `192.168.1.2`, 网关 `192.168.1.1`, DHCP 已关闭。
+镜像已按旁路由预设: LAN 静态 IP `192.168.2.2`, 网关 `192.168.2.1`, DHCP 已关闭。
 
 ## 文件
 
@@ -36,29 +36,29 @@ chmod +x build.sh run.sh
 # 1. 构建 (J4105 上执行, 约 5-15 分钟)
 ./build.sh
 # GitHub 访问慢就走代理:
-# ./build.sh http://192.168.1.x:7890
+# ./build.sh http://192.168.2.x:7890
 
 # 2. 启动 (先按你的内网改好变量, 用 ip a 确认网口名)
-IFACE=enp2s0 SUBNET=192.168.1.0/24 GATEWAY=192.168.1.1 IP=192.168.1.2 ./run.sh
+IFACE=enp2s0 SUBNET=192.168.2.0/24 GATEWAY=192.168.2.1 IP=192.168.2.2 ./run.sh
 ```
 
 ## 首次配置
 
-1. 访问 `http://192.168.1.2`, 用户名 `root`, 密码 `password`, **登录后立刻改密码**。
-2. 旁路由用法: 需要走旁路由的设备, 把网关手动设为 `192.168.1.2`(DNS 也设为它, 即可享受 AdGuardHome 去广告)。
-3. **AdGuardHome**: 服务 → AdGuard Home, 首次打开 `http://192.168.1.2:3000` 按向导完成初始化。
+1. 访问 `http://192.168.2.2`, 用户名 `root`, 密码 `password`, **登录后立刻改密码**。
+2. 旁路由用法: 需要走旁路由的设备, 把网关手动设为 `192.168.2.2`(DNS 也设为它, 即可享受 AdGuardHome 去广告)。
+3. **AdGuardHome**: 服务 → AdGuard Home, 首次打开 `http://192.168.2.2:3000` 按向导完成初始化。
    建议在插件设置里开启 **DNS 重定向(把 53 端口重定向到 AdGuardHome)**, 上游 DNS 填 `127.0.0.1`,
    这样 PassWall 的分流规则继续生效, 二者不打架。
 4. **PassWall**: 服务 → PassWall, 添加订阅/节点即可。注意 Docker 容器共用宿主机内核,
    `run.sh` 已把宿主机的 `/lib/modules` 挂载进容器并预加载 nft 模块,
    如 TPROXY 模式报错, 换 TCP REDIRECT 模式试试。
 5. **KMS**: 已开机自启。客户端管理员 CMD 执行:
-   `slmgr /skms 192.168.1.2` 然后 `slmgr /ato`。
+   `slmgr /skms 192.168.2.2` 然后 `slmgr /ato`。
 
 ## 常见问题
 
 - **构建时下载慢**: `./build.sh` 后面跟代理地址; opkg 已换腾讯镜像源。
-- **宿主机 ping 不通 192.168.1.2**: macvlan 的固有限制, 宿主机和容器默认互不通,
+- **宿主机 ping 不通 192.168.2.2**: macvlan 的固有限制, 宿主机和容器默认互不通,
   用局域网内其他设备访问, 或在宿主机上另建 macvlan 子接口。
 - **想换网段**: 改 `Dockerfile` 里 `network.lan.*` 四项和 `run.sh` 的变量, 重新构建启动。
 - **升级插件**: 进容器 `docker exec -it openwrt sh`, 用 opkg 或 luci 软件包页面更新;
