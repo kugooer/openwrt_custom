@@ -40,6 +40,15 @@ gh_api() {
 
 command -v opkg >/dev/null || { echo "ERROR: 基础镜像不是 opkg 版本"; exit 1; }
 
+echo "==> 检查 DNS"
+# 官方 rootfs 的 /etc/resolv.conf 是指向 /tmp/resolv.conf 的悬空软链接;
+# 若构建环境未注入 DNS, opkg/curl 会因解析失败瞬间挂掉
+if [ ! -e /etc/resolv.conf ]; then
+  echo "WARN: /etc/resolv.conf 悬空, 写入公共 DNS"
+  echo "nameserver 8.8.8.8" > /etc/resolv.conf
+fi
+cat /etc/resolv.conf
+
 echo "==> 更新 opkg 软件源"
 # rootfs tarball 里没有 /var/lock, opkg 建不了锁文件会直接 255 退出, 先建好
 mkdir -p /var/lock /var/log /var/run /var/opkg-lists
