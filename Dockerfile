@@ -41,6 +41,8 @@ gh_api() {
 command -v opkg >/dev/null || { echo "ERROR: 基础镜像不是 opkg 版本"; exit 1; }
 
 echo "==> 更新 opkg 软件源"
+# rootfs tarball 里没有 /var/lock, opkg 建不了锁文件会直接 255 退出, 先建好
+mkdir -p /var/lock /var/log /var/run /var/opkg-lists
 if [ -n "$opkg_mirror" ]; then
   echo "使用镜像源: $opkg_mirror"
   sed -i "s|downloads.openwrt.org|$opkg_mirror|g" /etc/opkg/distfeeds.conf || true
