@@ -5,9 +5,9 @@
 set -e
 
 IFACE="${IFACE:-enp2s0}"            # J4105 上接内网的那块网口, 用 `ip a` 确认
-SUBNET="${SUBNET:-192.168.1.0/24}"  # 内网网段
-GATEWAY="${GATEWAY:-192.168.1.1}"   # 主路由 IP
-IP="${IP:-192.168.1.2}"             # 旁路由 IP, 必须和 Dockerfile 里 network.lan.ipaddr 一致
+SUBNET="${SUBNET:-192.168.2.0/24}"  # 内网网段
+GATEWAY="${GATEWAY:-192.168.2.1}"   # 主路由 IP
+IP="${IP:-192.168.2.2}"             # 旁路由 IP, 必须和 Dockerfile 里 network.lan.ipaddr 一致
 IMAGE="${IMAGE:-my-openwrt:x86_64}"  # 用 GHCR 云构建的镜像时改成 ghcr.io/用户名/仓库名:x86_64
 
 # 宿主机预加载 nftables 模块, 供容器内 PassWall 使用(容器内无法 modprobe)
