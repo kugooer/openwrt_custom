@@ -1,6 +1,6 @@
 # 定制 OpenWrt (Docker 版, x86_64 / J4105)
 
-基于 `sulinggg/openwrt:x86_64`, 预装:
+基于 `openwrt/rootfs:x86-64-24.10.8`, 预装:
 
 | 组件 | 说明 |
 |---|---|
