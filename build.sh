@@ -1,0 +1,18 @@
+#!/bin/bash
+# 构建定制 OpenWrt 镜像
+# 用法:
+#   ./build.sh                        # 直接构建
+#   ./build.sh http://192.168.1.x:7890  # 走代理构建(GitHub 访问慢时用)
+set -e
+cd "$(dirname "$0")"
+
+PROXY="${1:-}"
+ARGS=()
+if [ -n "$PROXY" ]; then
+  ARGS+=(--build-arg "http_proxy=$PROXY" --build-arg "https_proxy=$PROXY")
+  echo "使用代理构建: $PROXY"
+fi
+
+docker build "${ARGS[@]}" -t my-openwrt:x86_64 .
+echo "构建完成: my-openwrt:x86_64"
+docker images my-openwrt:x86_64
