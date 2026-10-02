@@ -57,7 +57,7 @@ IFACE=enp2s0 SUBNET=192.168.2.0/24 GATEWAY=192.168.2.1 IP=192.168.2.2 ./run.sh
 
 ## 常见问题
 
-- **构建时下载慢**: `./build.sh` 后面跟代理地址; opkg 已换腾讯镜像源。
+- **构建时下载慢**: `./build.sh` 后面跟代理地址(`./build.sh http://192.168.2.x:7890`); opkg 慢则 `OPKG_MIRROR=mirrors.ustc.edu.cn/openwrt ./build.sh`。
 - **宿主机 ping 不通 192.168.2.2**: macvlan 的固有限制, 宿主机和容器默认互不通,
   用局域网内其他设备访问, 或在宿主机上另建 macvlan 子接口。
 - **想换网段**: 改 `Dockerfile` 里 `network.lan.*` 四项和 `run.sh` 的变量, 重新构建启动。
