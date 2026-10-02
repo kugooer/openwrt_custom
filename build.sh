@@ -13,6 +13,11 @@ if [ -n "$PROXY" ]; then
   ARGS+=(--build-arg "http_proxy=$PROXY" --build-arg "https_proxy=$PROXY")
   echo "使用代理构建: $PROXY"
 fi
+# 国内本地构建且 opkg 慢时: OPKG_MIRROR=mirrors.ustc.edu.cn/openwrt ./build.sh
+if [ -n "${OPKG_MIRROR:-}" ]; then
+  ARGS+=(--build-arg "opkg_mirror=$OPKG_MIRROR")
+  echo "使用 opkg 镜像源: $OPKG_MIRROR"
+fi
 
 docker build "${ARGS[@]}" -t my-openwrt:x86_64 .
 echo "构建完成: my-openwrt:x86_64"
