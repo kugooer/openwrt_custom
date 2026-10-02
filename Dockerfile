@@ -60,10 +60,10 @@ RUN set -eux; \
     \
     # ---------- 8. 旁路由默认网络: 静态 IP + 关闭 DHCP ---------- \
     uci set network.lan.proto='static'; \
-    uci set network.lan.ipaddr='192.168.1.2'; \
+    uci set network.lan.ipaddr='192.168.2.2'; \
     uci set network.lan.netmask='255.255.255.0'; \
-    uci set network.lan.gateway='192.168.1.1'; \
-    uci set network.lan.dns='192.168.1.1'; \
+    uci set network.lan.gateway='192.168.2.1'; \
+    uci set network.lan.dns='192.168.2.1'; \
     uci commit network; \
     uci set dhcp.lan.ignore='1'; uci commit dhcp; \
     uci set system.@system[0].hostname='OpenWrt-Docker'; uci commit system; \
