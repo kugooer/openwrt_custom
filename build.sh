@@ -2,7 +2,7 @@
 # 构建定制 OpenWrt 镜像
 # 用法:
 #   ./build.sh                        # 直接构建
-#   ./build.sh http://192.168.1.x:7890  # 走代理构建(GitHub 访问慢时用)
+#   ./build.sh http://192.168.2.x:7890  # 走代理构建(GitHub 访问慢时用)
 set -e
 cd "$(dirname "$0")"
 
