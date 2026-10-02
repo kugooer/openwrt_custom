@@ -5,6 +5,7 @@
 #   ./build.sh http://192.168.2.x:7890  # 走代理构建(GitHub 访问慢时用)
 set -e
 cd "$(dirname "$0")"
+export DOCKER_BUILDKIT=1
 
 PROXY="${1:-}"
 ARGS=()
