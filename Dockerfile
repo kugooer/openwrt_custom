@@ -4,6 +4,9 @@ FROM sulinggg/openwrt:x86_64
 
 ARG http_proxy=""
 ARG https_proxy=""
+# opkg 国内镜像源(可选)。Actions 上用官方源即可; 国内本地构建慢时可设为
+# mirrors.ustc.edu.cn/openwrt 或 mirrors.tuna.tsinghua.edu.cn/openwrt
+ARG opkg_mirror=""
 
 ENV TZ=Asia/Shanghai
 
@@ -35,8 +38,11 @@ RUN --mount=type=secret,id=gh_token \
     \
     command -v opkg >/dev/null || { echo "ERROR: 基础镜像不是 opkg 版本, 请检查 sulinggg/openwrt:x86_64 标签"; exit 1; }; \
     \
-    echo "==> 换 opkg 国内源"; \
-    sed -i 's|downloads.openwrt.org|mirrors.cloud.tencent.com/openwrt|g' /etc/opkg/distfeeds.conf || true; \
+    echo "==> 更新 opkg 软件源"; \
+    if [ -n "$opkg_mirror" ]; then \
+      echo "使用镜像源: $opkg_mirror"; \
+      sed -i "s|downloads.openwrt.org|$opkg_mirror|g" /etc/opkg/distfeeds.conf || true; \
+    fi; \
     opkg update || { echo "ERROR: opkg update 失败"; exit 1; }; \
     \
     echo "==> 安装基础工具"; \
