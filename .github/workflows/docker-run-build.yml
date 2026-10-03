@@ -22,29 +22,19 @@ env:
   IMAGE: ghcr.io/kugooer/openwrt_custom
 
 jobs:
-  build:
+  build-x86_64:
     # 手动触发时按选择的架构过滤; push 触发时全构建
-    if: ${{ github.event_name == 'push' || inputs.arch == 'all' || inputs.arch == matrix.arch }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: x86_64
-            runner: ubuntu-latest
-            base_image: openwrt/rootfs:x86-64-24.10.8
-            xray_url: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
-            agh_bin_url: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
-            vlmcsd_url: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            base_image: openwrt/rootfs@sha256:f6dd33c1d9b7d6f1e0848f2fbb92b8d03fc9b425dc08c3574a44936b93133704
-            xray_url: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-arm64-v8a.zip
-            agh_bin_url: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz
-            vlmcsd_url: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_aarch64_cortex-a72.ipk
-    runs-on: ${{ matrix.runner }}
+    if: ${{ github.event_name == 'push' || inputs.arch == 'all' || inputs.arch == 'x86_64' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    env:
+      ARCH_TAG: x86_64
+      BASE_IMAGE: openwrt/rootfs:x86-64-24.10.8
+      XRAY_URL: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+      AGH_BIN_URL: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
+      VLMCS_URL: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,11 +46,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build inside running container (${{ matrix.arch }})
+      - name: Build inside running container (x86_64)
         run: |
           set -eux
           # 用 docker run 而不是 docker build: 运行时的容器 DNS 正常, opkg 可用
-          docker run --name owrt-builder ${{ matrix.base_image }} /bin/sh -c '
+          docker run --name owrt-builder "$BASE_IMAGE" /bin/sh -c '
             set -eux
             mkdir -p /var/lock /var/log /var/run /var/opkg-lists
             opkg update
@@ -78,7 +68,7 @@ jobs:
             curl -fSL -o pw-i18n.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-i18n-passwall-zh-cn_26.10.1_all.ipk
             curl -fSL -o agh.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-app-adguardhome_1.8-20260622-r1_all.ipk
             curl -fSL -o agh-i18n.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-i18n-adguardhome-zh-cn_26.173.16244.65c9e30_all.ipk
-            curl -fSL -o vlmcsd.ipk ${{ matrix.vlmcsd_url }}
+            curl -fSL -o vlmcsd.ipk ${{ env.VLMCS_URL }}
             curl -fSL -o luci-vlmcsd.ipk https://github.com/cokebar/luci-app-vlmcsd/releases/download/v1.0.2-1/luci-app-vlmcsd_1.0.2-1_all.ipk
             # PassWall 的 chinadns-ng/dns2socks/tcping/microsocks 不在官方源, --force-depends 跳过; Xray 核心单独提供
             opkg install pw-app.ipk pw-i18n.ipk --force-depends || true
@@ -87,13 +77,13 @@ jobs:
             opkg install --force-arch vlmcsd.ipk luci-vlmcsd.ipk || true
 
             # Xray 内核 (按架构)
-            curl -fSL -o /tmp/xray.zip ${{ matrix.xray_url }}
+            curl -fSL -o /tmp/xray.zip ${{ env.XRAY_URL }}
             unzip -o /tmp/xray.zip -d /usr/bin/
             chmod +x /usr/bin/xray
 
             # AdGuardHome 主程序 (按架构; BusyBox tar 不支持 --strip-components)
             mkdir -p /opt/AdGuardHome
-            curl -fSL -o /tmp/agh.tgz ${{ matrix.agh_bin_url }}
+            curl -fSL -o /tmp/agh.tgz ${{ env.AGH_BIN_URL }}
             tar -xz -C /tmp -f /tmp/agh.tgz
             AGH_BIN=$(find /tmp/AdGuardHome -name AdGuardHome -type f | head -1)
             cp "$AGH_BIN" /opt/AdGuardHome/
@@ -118,13 +108,100 @@ jobs:
             echo "BUILD OK"
           '
 
-      - name: Commit and push (${{ matrix.arch }})
+      - name: Commit and push (x86_64)
         run: |
           set -eux
           docker commit \
             --change='ENV TZ=Asia/Shanghai' \
             --change='EXPOSE 22 53 80 3000 1688' \
             --change='CMD ["/sbin/init"]' \
-            owrt-builder ${{ env.IMAGE }}:${{ matrix.arch }}
-          docker push ${{ env.IMAGE }}:${{ matrix.arch }}
+            owrt-builder ${{ env.IMAGE }}:${{ env.ARCH_TAG }}
+          docker push ${{ env.IMAGE }}:${{ env.ARCH_TAG }}
+          docker rm owrt-builder
+
+  build-arm64:
+    if: ${{ github.event_name == 'push' || inputs.arch == 'all' || inputs.arch == 'arm64' }}
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    env:
+      ARCH_TAG: arm64
+      BASE_IMAGE: openwrt/rootfs@sha256:f6dd33c1d9b7d6f1e0848f2fbb92b8d03fc9b425dc08c3574a44936b93133704
+      XRAY_URL: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-arm64-v8a.zip
+      AGH_BIN_URL: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz
+      VLMCS_URL: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_aarch64_cortex-a72.ipk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build inside running container (arm64)
+        run: |
+          set -eux
+          docker run --name owrt-builder "$BASE_IMAGE" /bin/sh -c '
+            set -eux
+            mkdir -p /var/lock /var/log /var/run /var/opkg-lists
+            opkg update
+
+            opkg install ca-bundle curl wget-ssl unzip jq zoneinfo-asia luci-i18n-base-zh-cn
+            opkg install ip-full luci-compat resolveip
+            opkg remove dnsmasq || true
+            opkg install dnsmasq-full
+
+            cd /tmp
+            curl -fSL -o pw-app.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-app-passwall_26.10.1-r1_all.ipk
+            curl -fSL -o pw-i18n.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-i18n-passwall-zh-cn_26.10.1_all.ipk
+            curl -fSL -o agh.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-app-adguardhome_1.8-20260622-r1_all.ipk
+            curl -fSL -o agh-i18n.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-i18n-adguardhome-zh-cn_26.173.16244.65c9e30_all.ipk
+            curl -fSL -o vlmcsd.ipk ${{ env.VLMCS_URL }}
+            curl -fSL -o luci-vlmcsd.ipk https://github.com/cokebar/luci-app-vlmcsd/releases/download/v1.0.2-1/luci-app-vlmcsd_1.0.2-1_all.ipk
+            opkg install pw-app.ipk pw-i18n.ipk --force-depends || true
+            opkg install agh.ipk agh-i18n.ipk --force-depends || true
+            opkg install --force-arch vlmcsd.ipk luci-vlmcsd.ipk || true
+
+            curl -fSL -o /tmp/xray.zip ${{ env.XRAY_URL }}
+            unzip -o /tmp/xray.zip -d /usr/bin/
+            chmod +x /usr/bin/xray
+
+            mkdir -p /opt/AdGuardHome
+            curl -fSL -o /tmp/agh.tgz ${{ env.AGH_BIN_URL }}
+            tar -xz -C /tmp -f /tmp/agh.tgz
+            AGH_BIN=$(find /tmp/AdGuardHome -name AdGuardHome -type f | head -1)
+            cp "$AGH_BIN" /opt/AdGuardHome/
+            chmod +x /opt/AdGuardHome/AdGuardHome
+            rm -rf /tmp/AdGuardHome
+
+            cat > /etc/config/network <<NETEOF
+          config interface "lan"
+                  option device "eth0"
+                  option proto "static"
+                  option ipaddr "192.168.2.2"
+                  option netmask "255.255.255.0"
+                  option gateway "192.168.2.1"
+                  option dns "192.168.2.1"
+          NETEOF
+            uci set dhcp.lan.ignore="1"; uci commit dhcp
+            (echo "password"; echo "password") | passwd root
+            /etc/init.d/vlmcsd enable 2>/dev/null || true
+
+            rm -f /tmp/*.ipk /tmp/*.zip /tmp/*.tgz
+            echo "BUILD OK"
+          '
+
+      - name: Commit and push (arm64)
+        run: |
+          set -eux
+          docker commit \
+            --change='ENV TZ=Asia/Shanghai' \
+            --change='EXPOSE 22 53 80 3000 1688' \
+            --change='CMD ["/sbin/init"]' \
+            owrt-builder ${{ env.IMAGE }}:${{ env.ARCH_TAG }}
+          docker push ${{ env.IMAGE }}:${{ env.ARCH_TAG }}
           docker rm owrt-builder
