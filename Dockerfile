@@ -46,13 +46,17 @@ gh_api() {
 command -v opkg >/dev/null || { echo "ERROR: 基础镜像不是 opkg 版本"; exit 1; }
 
 echo "==> 检查 DNS"
-# 官方 rootfs 的 /etc/resolv.conf 可能是悬空软链接, 也可能是 Docker 挂载的空文件;
-# 只要里面没有有效的 nameserver, opkg/curl 就会瞬间解析失败
-if ! grep -qE "^[[:space:]]*nameserver[[:space:]]+" /etc/resolv.conf 2>/dev/null; then
-  echo "WARN: /etc/resolv.conf 无有效 DNS, 写入公共 DNS"
-  echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || echo "WARN: 无法写入 /etc/resolv.conf"
+echo "--- 当前 resolv.conf:"
+cat /etc/resolv.conf 2>/dev/null || echo "(无法读取)"
+# 实测 DNS 是否真的可用 (只检查文件内容不够, 坏掉的 nameserver 也会瞬间失败)
+if nslookup -timeout=5 downloads.openwrt.org >/dev/null 2>&1; then
+  echo "DNS 解析正常"
+else
+  echo "WARN: DNS 解析失败, 切换到公共 DNS"
+  printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf 2>/dev/null \
+    || echo "WARN: 无法写入 /etc/resolv.conf"
+  cat /etc/resolv.conf 2>/dev/null || true
 fi
-cat /etc/resolv.conf 2>/dev/null || echo "WARN: 无法读取 /etc/resolv.conf"
 
 echo "==> 更新 opkg 软件源"
 # rootfs tarball 里没有 /var/lock, opkg 建不了锁文件会直接 255 退出, 先建好
