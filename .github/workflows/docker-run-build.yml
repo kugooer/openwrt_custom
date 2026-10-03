@@ -1,4 +1,4 @@
-name: Build OpenWrt (docker run + commit)
+name: Build OpenWrt (docker run + commit, multi-arch)
 
 on:
   workflow_dispatch:
@@ -13,7 +13,22 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+            base_image: openwrt/rootfs:x86-64-24.10.8
+            xray_url: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+            agh_bin_url: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
+            vlmcsd_url: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            base_image: openwrt/rootfs:aarch64_generic-24.10.8
+            xray_url: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-arm64.zip
+            agh_bin_url: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz
+            vlmcsd_url: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_aarch64_cortex-a72.ipk
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -28,11 +43,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build inside running container (runtime DNS works)
+      - name: Build inside running container (${{ matrix.arch }})
         run: |
           set -eux
           # 用 docker run 而不是 docker build: 运行时的容器 DNS 正常, opkg 可用
-          docker run --name owrt-builder openwrt/rootfs:x86-64-24.10.8 /bin/sh -c '
+          docker run --name owrt-builder ${{ matrix.base_image }} /bin/sh -c '
             set -eux
             mkdir -p /var/lock /var/log /var/run /var/opkg-lists
             opkg update
@@ -44,27 +59,27 @@ jobs:
             opkg remove dnsmasq || true
             opkg install dnsmasq-full
 
-            # 第三方 .ipk (从 release 下载)
+            # 第三方 .ipk (从 release 下载; luci 包是 all 架构, 双架构通用)
             cd /tmp
             curl -fSL -o pw-app.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-app-passwall_26.10.1-r1_all.ipk
             curl -fSL -o pw-i18n.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-i18n-passwall-zh-cn_26.10.1_all.ipk
             curl -fSL -o agh.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-app-adguardhome_1.8-20260622-r1_all.ipk
             curl -fSL -o agh-i18n.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-i18n-adguardhome-zh-cn_26.173.16244.65c9e30_all.ipk
-            curl -fSL -o vlmcsd.ipk https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
+            curl -fSL -o vlmcsd.ipk ${{ matrix.vlmcsd_url }}
             curl -fSL -o luci-vlmcsd.ipk https://github.com/cokebar/luci-app-vlmcsd/releases/download/v1.0.2-1/luci-app-vlmcsd_1.0.2-1_all.ipk
             # PassWall 的 chinadns-ng/dns2socks/tcping/microsocks 不在官方源, --force-depends 跳过; Xray 核心单独提供
             opkg install pw-app.ipk pw-i18n.ipk --force-depends || true
             opkg install agh.ipk agh-i18n.ipk --force-depends || true
             opkg install vlmcsd.ipk luci-vlmcsd.ipk || true
 
-            # Xray 内核
-            curl -fSL -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+            # Xray 内核 (按架构)
+            curl -fSL -o /tmp/xray.zip ${{ matrix.xray_url }}
             unzip -o /tmp/xray.zip -d /usr/bin/
             chmod +x /usr/bin/xray
 
-            # AdGuardHome 主程序 (BusyBox tar 不支持 --strip-components, 解压后手动挪二进制)
+            # AdGuardHome 主程序 (按架构; BusyBox tar 不支持 --strip-components)
             mkdir -p /opt/AdGuardHome
-            curl -fSL -o /tmp/agh.tgz https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
+            curl -fSL -o /tmp/agh.tgz ${{ matrix.agh_bin_url }}
             tar -xz -C /tmp -f /tmp/agh.tgz
             AGH_BIN=$(find /tmp/AdGuardHome -name AdGuardHome -type f | head -1)
             cp "$AGH_BIN" /opt/AdGuardHome/
@@ -89,13 +104,13 @@ jobs:
             echo "BUILD OK"
           '
 
-      - name: Commit and push
+      - name: Commit and push (${{ matrix.arch }})
         run: |
           set -eux
           docker commit \
             --change='ENV TZ=Asia/Shanghai' \
             --change='EXPOSE 22 53 80 3000 1688' \
             --change='CMD ["/sbin/init"]' \
-            owrt-builder ${{ env.IMAGE }}:x86_64
-          docker push ${{ env.IMAGE }}:x86_64
+            owrt-builder ${{ env.IMAGE }}:${{ matrix.arch }}
+          docker push ${{ env.IMAGE }}:${{ matrix.arch }}
           docker rm owrt-builder
