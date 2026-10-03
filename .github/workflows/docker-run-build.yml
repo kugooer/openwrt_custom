@@ -14,6 +14,7 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - arch: x86_64
@@ -24,7 +25,7 @@ jobs:
             vlmcsd_url: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
           - arch: arm64
             runner: ubuntu-24.04-arm
-            base_image: openwrt/rootfs:aarch64_generic-24.10.8
+            base_image: openwrt/rootfs@sha256:f6dd33c1d9b7d6f1e0848f2fbb92b8d03fc9b425dc08c3574a44936b93133704
             xray_url: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-arm64.zip
             agh_bin_url: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz
             vlmcsd_url: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_aarch64_cortex-a72.ipk
