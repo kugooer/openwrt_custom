@@ -62,11 +62,14 @@ jobs:
             unzip -o /tmp/xray.zip -d /usr/bin/
             chmod +x /usr/bin/xray
 
-            # AdGuardHome 主程序
+            # AdGuardHome 主程序 (BusyBox tar 不支持 --strip-components, 解压后手动挪二进制)
             mkdir -p /opt/AdGuardHome
             curl -fSL -o /tmp/agh.tgz https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
-            tar -xz -C /opt/AdGuardHome --strip-components=1 -f /tmp/agh.tgz
+            tar -xz -C /tmp -f /tmp/agh.tgz
+            AGH_BIN=$(find /tmp/AdGuardHome -name AdGuardHome -type f | head -1)
+            cp "$AGH_BIN" /opt/AdGuardHome/
             chmod +x /opt/AdGuardHome/AdGuardHome
+            rm -rf /tmp/AdGuardHome
 
             # 旁路由网络配置
             cat > /etc/config/network <<NETEOF
