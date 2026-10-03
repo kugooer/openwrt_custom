@@ -1,0 +1,98 @@
+name: Build OpenWrt (docker run + commit)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'docker-build/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/kugooer/openwrt_custom
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build inside running container (runtime DNS works)
+        run: |
+          set -eux
+          # 用 docker run 而不是 docker build: 运行时的容器 DNS 正常, opkg 可用
+          docker run --name owrt-builder openwrt/rootfs:x86-64-24.10.8 /bin/sh -c '
+            set -eux
+            mkdir -p /var/lock /var/log /var/run /var/opkg-lists
+            opkg update
+
+            # 官方包
+            opkg install ca-bundle curl wget-ssl unzip jq zoneinfo-asia luci-i18n-base-zh-cn
+            opkg install ip-full luci-compat resolveip
+            # dnsmasq-full 替换 dnsmasq (PassWall 需要)
+            opkg remove dnsmasq || true
+            opkg install dnsmasq-full
+
+            # 第三方 .ipk (从 release 下载)
+            cd /tmp
+            curl -fSL -o pw-app.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-app-passwall_26.10.1-r1_all.ipk
+            curl -fSL -o pw-i18n.ipk https://github.com/Openwrt-Passwall/openwrt-passwall/releases/download/26.10.1-1/23.05-24.10_luci-i18n-passwall-zh-cn_26.10.1_all.ipk
+            curl -fSL -o agh.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-app-adguardhome_1.8-20260622-r1_all.ipk
+            curl -fSL -o agh-i18n.ipk https://github.com/AkihaZhang/luci-app-adguardhome/releases/download/latest/luci-i18n-adguardhome-zh-cn_26.173.16244.65c9e30_all.ipk
+            curl -fSL -o vlmcsd.ipk https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
+            curl -fSL -o luci-vlmcsd.ipk https://github.com/cokebar/luci-app-vlmcsd/releases/download/v1.0.2-1/luci-app-vlmcsd_1.0.2-1_all.ipk
+            # PassWall 的 chinadns-ng/dns2socks/tcping/microsocks 不在官方源, --force-depends 跳过; Xray 核心单独提供
+            opkg install pw-app.ipk pw-i18n.ipk --force-depends || true
+            opkg install agh.ipk agh-i18n.ipk --force-depends || true
+            opkg install vlmcsd.ipk luci-vlmcsd.ipk || true
+
+            # Xray 内核
+            curl -fSL -o /tmp/xray.zip https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
+            unzip -o /tmp/xray.zip -d /usr/bin/
+            chmod +x /usr/bin/xray
+
+            # AdGuardHome 主程序
+            mkdir -p /opt/AdGuardHome
+            curl -fSL -o /tmp/agh.tgz https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
+            tar -xz -C /opt/AdGuardHome --strip-components=1 -f /tmp/agh.tgz
+            chmod +x /opt/AdGuardHome/AdGuardHome
+
+            # 旁路由网络配置
+            cat > /etc/config/network <<NETEOF
+          config interface "lan"
+                  option device "eth0"
+                  option proto "static"
+                  option ipaddr "192.168.2.2"
+                  option netmask "255.255.255.0"
+                  option gateway "192.168.2.1"
+                  option dns "192.168.2.1"
+          NETEOF
+            uci set dhcp.lan.ignore="1"; uci commit dhcp
+            (echo "password"; echo "password") | passwd root
+            /etc/init.d/vlmcsd enable 2>/dev/null || true
+
+            rm -f /tmp/*.ipk /tmp/*.zip /tmp/*.tgz
+            echo "BUILD OK"
+          '
+
+      - name: Commit and push
+        run: |
+          set -eux
+          docker commit \
+            --change='ENV TZ=Asia/Shanghai' \
+            --change='EXPOSE 22 53 80 3000 1688' \
+            --change='CMD ["/sbin/init"]' \
+            owrt-builder ${{ env.IMAGE }}:x86_64
+          docker push ${{ env.IMAGE }}:x86_64
+          docker rm owrt-builder
