@@ -16,7 +16,12 @@ EXPOSE 22 53 80 3000 1688
 # GitHub Actions 由 workflow 传入; 本地构建没有也不影响
 RUN --mount=type=secret,id=gh_token <<'SCRIPT'
 set -eux
-export http_proxy="$http_proxy" https_proxy="$https_proxy" HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy"
+# 用 :- 防御变量未设置时被 set -u 直接杀掉(静默失败)
+export http_proxy="${http_proxy:-}" https_proxy="${https_proxy:-}" HTTP_PROXY="${HTTP_PROXY:-}" HTTPS_PROXY="${HTTPS_PROXY:-}"
+
+echo "--- 诊断: 代理/DNS 环境"
+[ -n "${http_proxy:-}" ] && echo "http_proxy 已设置" || echo "http_proxy 未设置"
+ls -la /etc/resolv.conf 2>/dev/null || echo "(无 /etc/resolv.conf)"
 
 GH_HDR=""
 if [ -s /run/secrets/gh_token ]; then
@@ -45,9 +50,9 @@ echo "==> 检查 DNS"
 # 若构建环境未注入 DNS, opkg/curl 会因解析失败瞬间挂掉
 if [ ! -e /etc/resolv.conf ]; then
   echo "WARN: /etc/resolv.conf 悬空, 写入公共 DNS"
-  echo "nameserver 8.8.8.8" > /etc/resolv.conf
+  echo "nameserver 8.8.8.8" > /etc/resolv.conf 2>/dev/null || echo "WARN: 无法写入 /etc/resolv.conf"
 fi
-cat /etc/resolv.conf
+cat /etc/resolv.conf 2>/dev/null || echo "WARN: 无法读取 /etc/resolv.conf"
 
 echo "==> 更新 opkg 软件源"
 # rootfs tarball 里没有 /var/lock, opkg 建不了锁文件会直接 255 退出, 先建好
