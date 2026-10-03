@@ -1,0 +1,70 @@
+name: Check OpenWrt Update
+
+# 每天检查一次 OpenWrt 是否有新版本, 有则更新 .openwrt-version 并触发构建
+on:
+  schedule:
+    - cron: '0 2 * * *'  # UTC 2点 = 北京时间10点
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for new version
+        id: check
+        run: |
+          LATEST=$(curl -sL --max-time 30 "https://downloads.openwrt.org/releases/" \
+            | grep -oE 'href="24\.10\.[0-9]+/"' | grep -oE '24\.10\.[0-9]+' | sort -Vu | tail -1)
+          echo "latest=$LATEST" >> $GITHUB_OUTPUT
+          CURRENT=$(grep OPENWRT_VERSION .openwrt-version | cut -d= -f2)
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          if [ "$LATEST" != "$CURRENT" ] && [ -n "$LATEST" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "发现新版本: $CURRENT -> $LATEST"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "已是最新: $CURRENT"
+          fi
+
+      - name: Update version file and trigger build
+        if: steps.check.outputs.update_needed == 'true'
+        env:
+          PAT: ${{ secrets.ACTIONS_TRIGGER_PAT }}
+        run: |
+          set -eux
+          LATEST=${{ steps.check.outputs.latest }}
+
+          # 解析 arm64 的 digest (tag 的 arch 标注是错的, 必须按 digest 拉)
+          TOKEN=$(curl -sL --max-time 30 \
+            "https://auth.docker.io/token?service=registry.docker.io&scope=repository:openwrt/rootfs:pull" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+          DIGEST=$(curl -sL --max-time 30 \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://registry-1.docker.io/v2/openwrt/rootfs/manifests/aarch64_generic-$LATEST" \
+            | python3 -c "
+          import json,sys
+          d = json.load(sys.stdin)
+          for m in d.get('manifests', []):
+              if m.get('platform', {}).get('os') == 'linux':
+                  print(m['digest']); break
+          ")
+          [ -n "$DIGEST" ] || { echo "ERROR: 解析 arm64 digest 失败"; exit 1; }
+
+          # 通过 API 更新 .openwrt-version
+          CONTENT=$(printf "OPENWRT_VERSION=%s\nARM64_DIGEST=%s\n" "$LATEST" "$DIGEST" | base64 -w0)
+          SHA=$(curl -sL -H "Authorization: Bearer $PAT" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/.openwrt-version" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['sha'])")
+          curl -sL -X PUT -H "Authorization: Bearer $PAT" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/contents/.openwrt-version" \
+            -d "{\"message\":\"chore: bump OpenWrt to $LATEST\",\"content\":\"$CONTENT\",\"sha\":\"$SHA\",\"branch\":\"main\"}"
+
+          # 触发构建 (arch=all)
+          curl -sL -X POST -H "Authorization: Bearer $PAT" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/docker-run-build.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"arch":"all"}}'
+          echo "已触发构建"
