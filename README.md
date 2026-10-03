@@ -73,3 +73,20 @@ IFACE=enp2s0 SUBNET=192.168.2.0/24 GATEWAY=192.168.2.1 IP=192.168.2.2 ./run.sh
 - **想换网段**: 改 workflow 里 `network.lan.*` 四项和 `run.sh` 的变量, 重新构建启动。
 - **升级插件**: 进容器 `docker exec -it openwrt sh`, 用 opkg 或 luci 软件包页面更新;
   大版本升级建议重新触发 Actions 构建新镜像。
+
+## 配置持久化(本地)
+
+镜像每次重建配置会丢失。用 volume 挂载把配置存本机, 镜像更新时自动带上:
+
+```bash
+# 1. 首次: 从配好的容器导出配置到本机
+mkdir -p /opt/openwrt-config
+docker cp openwrt:/etc/config/passwall /opt/openwrt-config/passwall
+docker cp openwrt:/etc/config/adguardhome /opt/openwrt-config/adguardhome
+docker cp openwrt:/opt/AdGuardHome/AdGuardHome.yaml /opt/openwrt-config/AdGuardHome.yaml
+
+# 2. 以后: 用 update-local.sh 一键更新 (pull 新镜像 + 挂载本地配置重建)
+chmod +x update-local.sh && ./update-local.sh
+```
+
+敏感配置只存本机 `/opt/openwrt-config/`, 不进仓库。详见 `update-local.sh`。
