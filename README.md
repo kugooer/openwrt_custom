@@ -1,6 +1,6 @@
-# 定制 OpenWrt (Docker 版, x86_64 / J4105)
+# 定制 OpenWrt (Docker 版, x86_64 / arm64)
 
-基于 `openwrt/rootfs:x86-64-24.10.8`, 预装:
+基于 OpenWrt 官方 rootfs (`24.10.8`), 预装:
 
 | 组件 | 说明 |
 |---|---|
@@ -10,30 +10,34 @@
 
 镜像已按旁路由预设: LAN 静态 IP `192.168.2.2`, 网关 `192.168.2.1`, DHCP 已关闭。
 
-## 文件
+## 架构支持
 
-- `Dockerfile` - 构建定义
-- `build.sh` - 构建脚本
-- `run.sh` - 启动脚本(macvlan)
+| 架构 | 镜像 tag | 说明 |
+|---|---|---|
+| x86_64 | `ghcr.io/kugooer/openwrt_custom:x86_64` | J4105 / 软路由小主机 |
+| arm64 | `ghcr.io/kugooer/openwrt_custom:arm64` | 树莓派 / ARM 盒子 |
 
-## 方案二: GitHub Actions 云构建(推荐, J4105 上不用装构建环境)
+## GitHub Actions 云构建(推荐)
 
-1. 在 GitHub 新建仓库(比如 `openwrt-docker`), 把这四个文件 + `.github/workflows/docker-build.yml` 推上去。
-2. 仓库的 Actions 页点 `Run workflow`, 等几分钟构建完成。
-3. 构建产物在仓库主页右侧 Packages 里, 地址形如 `ghcr.io/你的用户名/openwrt-docker:x86_64`。
-   首次使用去 Package 设置里改成 Public, 之后 J4105 上免登录可拉。
-4. J4105 上执行:
-   ```bash
-   IMAGE=ghcr.io/你的用户名/openwrt-docker:x86_64 ./run.sh
-   ```
-   注意 ghcr.io 国内直连可能慢, 需要走梯子。
+`.github/workflows/docker-run-build.yml` 在 Actions 上用 `docker run` + `docker commit` 方式构建
+(绕开 `docker build` 构建期 DNS 问题), 产物推送到 GHCR。
 
-## 方案一: 本地构建
+- 点 `Run workflow` 可下拉选择构建 `all` / `x86_64` / `arm64`, 默认全构建
+- push 到 main 也会自动构建(全架构)
+
+J4105 上执行:
+```bash
+docker pull ghcr.io/kugooer/openwrt_custom:x86_64
+IMAGE=ghcr.io/kugooer/openwrt_custom:x86_64 ./run.sh
+```
+注意 ghcr.io 国内直连可能慢, 需要走梯子。首次使用去 Package 设置里改成 Public, 之后免登录可拉。
+
+## 本地构建
 
 ```bash
 chmod +x build.sh run.sh
 
-# 1. 构建 (J4105 上执行, 约 5-15 分钟)
+# 1. 构建 (约 5-15 分钟)
 ./build.sh
 # GitHub 访问慢就走代理:
 # ./build.sh http://192.168.2.x:7890
@@ -41,6 +45,13 @@ chmod +x build.sh run.sh
 # 2. 启动 (先按你的内网改好变量, 用 ip a 确认网口名)
 IFACE=enp2s0 SUBNET=192.168.2.0/24 GATEWAY=192.168.2.1 IP=192.168.2.2 ./run.sh
 ```
+
+## 文件
+
+- `.github/workflows/docker-run-build.yml` - Actions 构建定义(多架构)
+- `Dockerfile` - 旧版构建定义(已废弃, 保留参考)
+- `build.sh` - 本地构建脚本
+- `run.sh` - 启动脚本(macvlan)
 
 ## 首次配置
 
@@ -57,9 +68,8 @@ IFACE=enp2s0 SUBNET=192.168.2.0/24 GATEWAY=192.168.2.1 IP=192.168.2.2 ./run.sh
 
 ## 常见问题
 
-- **构建时下载慢**: `./build.sh` 后面跟代理地址(`./build.sh http://192.168.2.x:7890`); opkg 慢则 `OPKG_MIRROR=mirrors.ustc.edu.cn/openwrt ./build.sh`。
 - **宿主机 ping 不通 192.168.2.2**: macvlan 的固有限制, 宿主机和容器默认互不通,
   用局域网内其他设备访问, 或在宿主机上另建 macvlan 子接口。
-- **想换网段**: 改 `Dockerfile` 里 `network.lan.*` 四项和 `run.sh` 的变量, 重新构建启动。
+- **想换网段**: 改 workflow 里 `network.lan.*` 四项和 `run.sh` 的变量, 重新构建启动。
 - **升级插件**: 进容器 `docker exec -it openwrt sh`, 用 opkg 或 luci 软件包页面更新;
-  大版本升级建议重新 `./build.sh` 构建新镜像。
+  大版本升级建议重新触发 Actions 构建新镜像。
