@@ -6,7 +6,7 @@ on:
       arch:
         description: '构建哪个架构的镜像'
         required: true
-        default: 'all'
+        default: 'x86_64'
         type: choice
         options:
           - all
@@ -31,13 +31,19 @@ jobs:
       packages: write
     env:
       ARCH_TAG: x86_64
-      BASE_IMAGE: openwrt/rootfs:x86-64-24.10.8
       XRAY_URL: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip
       AGH_BIN_URL: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
       VLMCS_URL: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_x86_64.ipk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Read OpenWrt version
+        id: owrt
+        run: |
+          source .openwrt-version
+          echo "base_image=openwrt/rootfs:x86-64-$OPENWRT_VERSION" >> $GITHUB_OUTPUT
+          echo "使用 base image: openwrt/rootfs:x86-64-$OPENWRT_VERSION"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -50,7 +56,7 @@ jobs:
         run: |
           set -eux
           # 用 docker run 而不是 docker build: 运行时的容器 DNS 正常, opkg 可用
-          docker run --name owrt-builder "$BASE_IMAGE" /bin/sh -c '
+          docker run --name owrt-builder "${{ steps.owrt.outputs.base_image }}" /bin/sh -c '
             set -eux
             mkdir -p /var/lock /var/log /var/run /var/opkg-lists
             opkg update
@@ -127,13 +133,19 @@ jobs:
       packages: write
     env:
       ARCH_TAG: arm64
-      BASE_IMAGE: openwrt/rootfs@sha256:f6dd33c1d9b7d6f1e0848f2fbb92b8d03fc9b425dc08c3574a44936b93133704
       XRAY_URL: https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-arm64-v8a.zip
       AGH_BIN_URL: https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_arm64.tar.gz
       VLMCS_URL: https://raw.githubusercontent.com/cokebar/openwrt-vlmcsd/gh-pages/vlmcsd_svn1113-1_aarch64_cortex-a72.ipk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Read OpenWrt version
+        id: owrt
+        run: |
+          source .openwrt-version
+          echo "base_image=openwrt/rootfs@$ARM64_DIGEST" >> $GITHUB_OUTPUT
+          echo "使用 base image digest: $ARM64_DIGEST"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -145,7 +157,7 @@ jobs:
       - name: Build inside running container (arm64)
         run: |
           set -eux
-          docker run --name owrt-builder "$BASE_IMAGE" /bin/sh -c '
+          docker run --name owrt-builder "${{ steps.owrt.outputs.base_image }}" /bin/sh -c '
             set -eux
             mkdir -p /var/lock /var/log /var/run /var/opkg-lists
             opkg update
